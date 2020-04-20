@@ -1,0 +1,126 @@
+model Electrardenne
+uses "mmxprs", "mmsheet"; !gain access to the Xpress-Optimizer solver and Excel
+
+setparam("XPRS_VERBOSE",true)
+setparam("XPRS_MAXTIME",60)
+
+declarations
+
+!SETS
+    NB=2;
+    SB=1..NB;
+    NH=24;
+    SH=1..NH;
+
+!PARAMETERS
+    Bar1Max=8000000;
+    Bar1Min=500000;
+    Bar2Max=4000000;
+    Bar2Min=200000;
+    TurbMax=500000;
+    TurbMin=0;
+    Delest2Min=36000;
+    PompeMax=720000;
+    PompeMin=0;
+    AmontMinuit=4000000;
+    AvalMinuit=3500000;
+    VarVannesMax1Heure=576000;
+    VarVannesMax2Heure=-576000;
+    At:array(SH) of integer;
+    Pt:array(SH) of integer;
+
+!VARIABLES
+    Turb:array(SH) of mpvar;
+    Delest:array(SB,SH) of mpvar;
+    Pompe:array(SH) of mpvar;
+    X:array(SB,SH) of mpvar;
+!printable Solutions
+    printTurb:array(SH) of real;
+    printDelest:array(SB,SH) of real;
+    printPompe:array(SH) of real;
+    printX:array(SB,SH) of real;
+
+!OBJECTIVE
+    MaxProd:linctr;
+
+!CONSTRAINTS
+    CTurbMax:linctr;
+    CTurbMin:linctr;
+    CDelest2Min:linctr;
+    CPompeMax:linctr;
+    CPompeMin:linctr;
+    CVarVannes1MaxHeure:linctr;
+    CVarVannes2MaxHeure:linctr;
+    CAmontMinuit:linctr;
+    CAvalMinuit:linctr;
+    CBar1Max:linctr;
+    CBar1Min:linctr;
+    CBar2Max:linctr;
+    CBar2Min:linctr;
+    CBalanceTemp1:linctr;
+    CBalanceTemp2:linctr;
+    CArretMachin1:inctr;
+    CArretMachin2:linctr;
+   
+end-declarations
+
+! INITIALISATION DATA FROM EXCEL
+
+initializations from “mmsheet.excel:noindex;Données_Electrardennes_MS2020.xlsx”
+
+At as “[Sheet1$B139:Y139]”
+Pt as “[Sheet1$B140:Y140]”
+
+end-initializations
+
+
+
+! OBJ : max Prod
+
+MaxProd:= (sum(h in SH) 0.0001*Pt(h)*Turb(h)) - (sum(h in SH) 0,00013*Pt(h)*Pompe(h))
+
+! CONSTRAINTS 
+
+forall (h in SH) CTurbMax(h) := Turb(h) <= TurbMax
+forall (h in SH) CTurbMin(h) := Turb(h) >= TurbMin
+forall (h in SH) CDelest2Min(h):= Delest(2, h) >= Delest2Min
+forall (h in SH) CBar1Max(h):= X(1,h) <= Bar1Max
+forall (h in SH) CBar1Min(h):= X(1,h) >= Bar1Min
+forall (h in SH) CBar2Max(h) := X(2,h) <= Bar2Max
+forall (h in SH) CBar2Min(h) := X(2,h) >= Bar2Min
+forall (h in SH) CPompeMax(h) := Pompe(h) <= PompeMax
+forall (h in SH) CPompeMin(h) := Pompe(h) >= PompeMin
+forall (h in SH) CVarVannes1MaxHeure(h) := ((Turb(h+1)+Delest(1, h+1)) - (Turb(h)+Delest(1,h))) <= VarVannesMax1Heure
+forall (h in Sh) CVarVannes1MaxHeure(h) := ((Turb(h+1)+Delest(1, h+1)) - (Turb(h)+Delest(1,h))) >= VarVannesMax2Heure
+forall (h in Sh) CVarVannes2MaxHeure(h) := (Delest(2, h+1) - (Delest(2,h)) <= VarVannesMax1Heure
+forall (h in Sh) CVarVannes2MaxHeure(h) := (Delest(2, h+1) - (Delest(2,h)) >= VarVannesMax2Heure
+CAmontMinuit(h) := X(1,24) = AmontMinuit
+CAvalMinuit(h) := X(2,24) = AvalMinuit
+CArretMachin1(h):=Delest(1,24)+Trub(24)=0
+CArretMachin2(h):=Delest(2,24)=0
+
+
+!Balance temporelle
+
+CBalanceTemp1(h):=X(1,h-1)+At(h)+Pompe(h)-Turb(h)-Delest(1,h)=X(1,h)
+CBalanceTemp2(h):=X(2,h-1)+Turb(h)+Delest(1,h)-Pompe(h)-Delest(2,h)=X(2,h)
+
+!RUN OPTIZIMATION
+
+maximize(MaxProd)
+
+! PRINT SOLUTIONS
+! Save solutions into constants
+
+forall (h in SH) printTurb(h) := getsol (Turb(h));
+forall (b in SB, h in SH) printDelest(b,h) :=getsol (Delest(b,h));
+forall (h in SH) printPompe(h) :=getsol (Pompe(h));
+forall (b in SB, h in SH) printX(b,h) :=getsol (X(b,h));
+
+! Print on Xpress
+
+writeln(
+
+! Print in Excel
+initializations to “mmsheet.excel:noindex;Données_Electrardennes_MS2020.xlsx”
+	printx as “[Sheet2$C1:Z6]”
